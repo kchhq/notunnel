@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>카카오 지도 + Tmap 경로 탐색</title>
+  <style>
+    html, body 
+    {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    #map 
+    {
+      width: 100%;
+      height: 100vh;
+    }
+
+    .floating-box 
+    {
+      position: absolute;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 8px 12px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    #optionBox 
+    {
+      top: 12px;
+      left: 12px;
+    }
+
+    #controls 
+    {
+      top: 60px;
+      left: 12px;
+    }
+
+    #searchBox 
+    {
+      top: 120px;
+      left: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    input 
+    {
+      padding: 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    
+  </style>
+<div id="searchResults" class="floating-box" style="top:200px; left:12px; display:none; max-height:200px; overflow:auto; background:white;"></div>
+
+  <!-- ✅ Kakao 지도 SDK (services 포함) -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=b07cb27e5d5cf7c382fc6dea83a955c3&libraries=services"></script>
+  </script>
+</head>
+<body>
+
+  <!-- 경로 옵션 선택 -->
+  <div id="optionBox" class="floating-box">
+    <label for="routeOption">경로 옵션:</label>
+    <select id="routeOption">
+      <option value="0">추천</option>
+      <option value="1">최단 거리</option>
+      <option value="2">최소 시간</option>
+      <option value="3">무료 도로</option>
+      <option value="4">고속도로 우선</option>
+    </select>
+  </div>
+
+  <!-- 경로 탐색 버튼 -->
+  <div id="controls" class="floating-box">
+    <button id="searchButton">경로 탐색</button>
+  </div>
+
+  <!-- 출발지 / 도착지 검색 -->
+  <div id="searchBox" class="floating-box">
+    <input type="text" id="startInput" placeholder="출발지를 검색하세요" />
+    <input type="text" id="endInput" placeholder="도착지를 검색하세요" />
+  </div>
+
+  <!-- 지도 표시 영역 -->
+  <div id="map">
+  </div>
+
+  <!-- 지도 스크립트 -->
+  <script type="module" src="./map.js">
+  </script>
+</body>
+</html>
