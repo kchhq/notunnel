@@ -14,7 +14,7 @@ export function drawRoute(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "appKey": "i21eBayOYj3UmtuIrwnnuaRfBIXFN5Fx9sQyQeIE"
+      "appKey": "APPKEY"
     },
     body: JSON.stringify({
       startX,
