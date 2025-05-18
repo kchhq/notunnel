@@ -1,209 +1,197 @@
-// ✅ 지도 + Tmap 연동 + 검색 결과 선택 기능 포함된 map.js
+// map.js
+
 import { drawRoute } from './route.js';
 
 let map;
-let markers = [];
-let polyline = null;
+let geocoder;
+let markers         = [];
+let startLatLng     = null;
+let endLatLng       = null;
+let routePolyline   = null;
+let tunnelPolyline  = null;
 
-let startLatLng = null;
-let endLatLng = null;
-
-const geocoder = new kakao.maps.services.Geocoder();
-
+/** 지도 초기화 */
 function initMap() {
-  const container = document.getElementById('map');
-  const options = {
-    center: new kakao.maps.LatLng(37.5665, 126.9780),
-    level: 5
-  };
-  map = new kakao.maps.Map(container, options);
+  geocoder = new kakao.maps.services.Geocoder();
 
-  addClickEvent();
+  map = new kakao.maps.Map(
+    document.getElementById('map'),
+    {
+      center: new kakao.maps.LatLng(37.5665, 126.9780),
+      level: 5
+    }
+  );
+
+  kakao.maps.event.addListener(map, 'click', onMapClick);
 }
 
-function addClickEvent() {
-  kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
-    const latlng = mouseEvent.latLng;
-
-    geocoder.coord2Address(latlng.getLng(), latlng.getLat(), function(result, status) {
+/** 맵 클릭 → 마커+인포윈도우 */
+function onMapClick(mouseEvent) {
+  const latlng = mouseEvent.latLng;
+  geocoder.coord2Address(
+    latlng.getLng(), latlng.getLat(),
+    (res, status) => {
       if (status === kakao.maps.services.Status.OK) {
-        const roadAddr = result[0].road_address?.address_name;
-        const jibunAddr = result[0].address?.address_name;
-        const address = roadAddr || jibunAddr || '주소 없음';
-
-        const marker = new kakao.maps.Marker({
-          position: latlng,
-          map: map
-        });
-
-        const content = `
-          <div style="padding:8px; font-size:13px; position:relative; min-width:220px;">
-            <div style="position:absolute; top:4px; right:6px; cursor:pointer;" onclick="closeInfoWindow(${latlng.getLat()}, ${latlng.getLng()})">❌</div>
-            <div style="margin-bottom:8px;">${address}</div>
-            <div style="display:flex; gap:6px;">
-              <button style="flex:1;" onclick="setStart(${latlng.getLat()}, ${latlng.getLng()})">출발지로 설정</button>
-              <button style="flex:1;" onclick="setEnd(${latlng.getLat()}, ${latlng.getLng()})">도착지로 설정</button>
-            </div>
-          </div>
-        `;
-
+        const addr = res[0].road_address?.address_name
+                  || res[0].address?.address_name
+                  || '주소 없음';
+        const marker = new kakao.maps.Marker({ position: latlng, map });
         const infowindow = new kakao.maps.InfoWindow({
-          content,
-          position: latlng
+          position: latlng,
+          content: `
+            <div style="padding:8px;min-width:200px;font-size:13px;position:relative;">
+              <div style="position:absolute;top:4px;right:4px;cursor:pointer;"
+                   onclick="closeInfoWindow(${latlng.getLat()},${latlng.getLng()})">
+                ❌
+              </div>
+              <div style="margin-bottom:8px;">${addr}</div>
+              <button onclick="setStart(${latlng.getLat()},${latlng.getLng()})">
+                출발지 설정
+              </button>
+              <button onclick="setEnd(${latlng.getLat()},${latlng.getLng()})">
+                도착지 설정
+              </button>
+            </div>
+          `
         });
-
         infowindow.open(map, marker);
-
         markers.push({ marker, infowindow });
       }
-    });
-  });
+    }
+  );
 }
 
-window.closeInfoWindow = function(lat, lng) {
-  const targetLat = roundCoord(lat);
-  const targetLng = roundCoord(lng);
-
-  markers = markers.filter(pair => {
-    const mPos = pair.marker.getPosition();
-    const isTarget =
-      roundCoord(mPos.getLat()) === targetLat &&
-      roundCoord(mPos.getLng()) === targetLng;
-
-    if (isTarget) {
-      pair.marker.setMap(null);
-      pair.infowindow.close();
+/** 인포윈도우 닫고 마커 제거 */
+window.closeInfoWindow = (lat, lng) => {
+  const rLat = Math.round(lat * 1e7) / 1e7;
+  const rLng = Math.round(lng * 1e7) / 1e7;
+  markers = markers.filter(o => {
+    const p = o.marker.getPosition();
+    const pLat = Math.round(p.getLat() * 1e7) / 1e7;
+    const pLng = Math.round(p.getLng() * 1e7) / 1e7;
+    if (pLat === rLat && pLng === rLng) {
+      o.marker.setMap(null);
+      o.infowindow?.close();
+      return false;
     }
-
-    return !isTarget;
+    return true;
   });
 };
 
-function roundCoord(coord) {
-  return Math.round(coord * 1e7) / 1e7;
-}
-
-// ✅ 장소 검색 후 결과 목록 보여주기
-function searchPlaces(keyword, type) {
-  const ps = new kakao.maps.services.Places();
-  ps.keywordSearch(keyword, (data, status) => {
-    const container = document.getElementById('searchResults');
-    container.innerHTML = '';
-
-    if (status === kakao.maps.services.Status.OK && data.length > 0) {
-      data.forEach(place => {
-        const item = document.createElement('div');
-        item.style.padding = '6px';
-        item.style.cursor = 'pointer';
-        item.style.borderBottom = '1px solid #ddd';
-        item.textContent = place.place_name;
-        item.onclick = () => {
-          const latlng = new kakao.maps.LatLng(place.y, place.x);
-          if (type === 'start') {
-            setStart(place.y, place.x);
-          } else {
-            setEnd(place.y, place.x);
-          }
-          container.style.display = 'none';
-        };
-        container.appendChild(item);
-      });
-      container.style.display = 'block';
-    } else {
-      container.innerHTML = '<div style="padding:6px;">검색 결과가 없습니다.</div>';
-      container.style.display = 'block';
-    }
-  });
-}
-
+/** 마커 찍기 */
 function placeMarker(latlng, title) {
-  const marker = new kakao.maps.Marker({
-    map,
-    position: latlng,
-    title
-  });
+  const marker = new kakao.maps.Marker({ map, position: latlng, title });
   markers.push({ marker });
 }
 
-function clearMap() {
-  markers.forEach(({ marker, infowindow }) => {
-    marker.setMap(null);
-    if (infowindow) infowindow.close();
+/** 모든 마커 지우기 */
+function clearMarkers() {
+  markers.forEach(o => {
+    o.marker.setMap(null);
+    o.infowindow?.close();
   });
   markers = [];
-
-  if (polyline) {
-    polyline.setMap(null);
-    polyline = null;
-  }
 }
 
-document.getElementById('searchButton').addEventListener('click', () => {
-  const startText = document.getElementById('startInput').value.trim();
-  const endText = document.getElementById('endInput').value.trim();
-  const option = document.getElementById('routeOption').value;
-  const avoidTunnel = document.getElementById('avoidTunnel')?.checked;
+/** 키워드 검색 → 결과 표시 */
+function searchPlaces(keyword, type) {
+  const ps = new kakao.maps.services.Places();
+  ps.keywordSearch(keyword, (data, status) => {
+    const box = document.getElementById('searchResults');
+    box.innerHTML = '';
+    if (status === kakao.maps.services.Status.OK && data.length) {
+      data.forEach(p => {
+        const div = document.createElement('div');
+        div.style.padding = '6px';
+        div.style.cursor = 'pointer';
+        div.style.borderBottom = '1px solid #ddd';
+        div.textContent = p.place_name;
+        div.onclick = () => {
+          if (type === 'start') setStart(p.y, p.x);
+          else                   setEnd(p.y, p.x);
+          box.style.display = 'none';
+        };
+        box.appendChild(div);
+      });
+      box.style.display = 'block';
+    } else {
+      box.innerHTML = `<div style="padding:6px;">검색 결과가 없습니다.</div>`;
+      box.style.display = 'block';
+    }
+  });
+}
 
-  if (!startLatLng || !endLatLng) {
-    alert('출발지와 도착지를 모두 선택하거나 검색 후 선택해주세요.');
-    return;
-  }
-
-  clearMap();
-  placeMarker(startLatLng, '출발지');
-  placeMarker(endLatLng, '도착지');
-
-  drawRoute(
-    map,
-    startLatLng.getLng(), startLatLng.getLat(),
-    endLatLng.getLng(), endLatLng.getLat(),
-    option,
-    pl => (polyline = pl),
-    avoidTunnel
-  );
-
-  const midLat = (startLatLng.getLat() + endLatLng.getLat()) / 2;
-  const midLng = (startLatLng.getLng() + endLatLng.getLng()) / 2;
-  map.setCenter(new kakao.maps.LatLng(midLat, midLng));
-});
-
-['startInput', 'endInput'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      const keyword = e.target.value.trim();
-      if (keyword) {
-        searchPlaces(keyword, id.includes('start') ? 'start' : 'end');
+// --- 이벤트 바인딩 ---
+window.addEventListener('load', () => {
+  document.getElementById('searchButton')
+    .addEventListener('click', async () => {
+      if (!startLatLng || !endLatLng) {
+        alert('출발지와 도착지를 모두 설정해주세요.');
+        return;
       }
-    }
+
+      clearMarkers();
+      routePolyline?.setMap(null);
+      tunnelPolyline?.setMap(null);
+      routePolyline = tunnelPolyline = null;
+
+      placeMarker(startLatLng, '출발지');
+      placeMarker(endLatLng,   '도착지');
+
+      const opt   = document.getElementById('routeOption').value;
+      const avoid = opt === '5';       // “터널 회피” 옵션인 경우
+      const apiOpt= avoid ? '0' : opt; // Tmap API 에는 0~4 만 허용
+      const hl    = document.getElementById('highlightTunnels').checked;
+
+      const { mainPolyline, tunnelPolyline: tp } = await drawRoute(
+        map,
+        startLatLng.getLng(), startLatLng.getLat(),
+        endLatLng.getLng(),   endLatLng.getLat(),
+        apiOpt, avoid, hl
+      );
+      routePolyline  = mainPolyline;
+      tunnelPolyline = tp;
+
+      // 지도 중앙 이동
+      const midLat = (startLatLng.getLat() + endLatLng.getLat()) / 2;
+      const midLng = (startLatLng.getLng() + endLatLng.getLng()) / 2;
+      map.setCenter(new kakao.maps.LatLng(midLat, midLng));
+    });
+
+  ['startInput','endInput'].forEach(id => {
+    document.getElementById(id)
+      .addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          const kw = e.target.value.trim();
+          if (kw) searchPlaces(kw, id.includes('start') ? 'start' : 'end');
+        }
+      });
   });
+
+  window.setStart = (lat, lng) => {
+    startLatLng = new kakao.maps.LatLng(lat, lng);
+    geocoder.coord2Address(lng, lat, (res, st) => {
+      if (st === kakao.maps.services.Status.OK) {
+        document.getElementById('startInput').value =
+          res[0].road_address?.address_name ||
+          res[0].address?.address_name      ||
+          '';
+      }
+    });
+  };
+
+  window.setEnd = (lat, lng) => {
+    endLatLng = new kakao.maps.LatLng(lat, lng);
+    geocoder.coord2Address(lng, lat, (res, st) => {
+      if (st === kakao.maps.services.Status.OK) {
+        document.getElementById('endInput').value =
+          res[0].road_address?.address_name ||
+          res[0].address?.address_name      ||
+          '';
+      }
+    });
+  };
+
+  // SDK 로딩이 보장된 시점에 맵 초기화
+  initMap();
 });
-
-window.setStart = function(lat, lng) {
-  startLatLng = new kakao.maps.LatLng(lat, lng);
-
-  geocoder.coord2Address(lng, lat, function(result, status) {
-    if (status === kakao.maps.services.Status.OK) {
-      const roadAddr = result[0].road_address?.address_name;
-      const jibunAddr = result[0].address?.address_name;
-      const address = roadAddr || jibunAddr || '';
-      document.getElementById('startInput').value = address;
-    }
-  });
-
-};
-
-window.setEnd = function(lat, lng) {
-  endLatLng = new kakao.maps.LatLng(lat, lng);
-
-  geocoder.coord2Address(lng, lat, function(result, status) {
-    if (status === kakao.maps.services.Status.OK) {
-      const roadAddr = result[0].road_address?.address_name;
-      const jibunAddr = result[0].address?.address_name;
-      const address = roadAddr || jibunAddr || '';
-      document.getElementById('endInput').value = address;
-    }
-  });
-
-};
-
-initMap();
