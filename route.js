@@ -19,7 +19,7 @@ export async function drawRoute(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "appKey": "5TogRzOfgh9z2wn3C6uVJ4P1YoWSqpMt2EsxbnLa"
+        "appKey": "APPKEY"
       },
       body: JSON.stringify({
         startX: sx, startY: sy,
