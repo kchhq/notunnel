@@ -143,14 +143,29 @@ window.addEventListener('load', () => {
       const apiOpt= avoid ? '0' : opt; // Tmap API 에는 0~4 만 허용
       const hl    = document.getElementById('highlightTunnels').checked;
 
-      const { mainPolyline, tunnelPolyline: tp } = await drawRoute(
+      const { mainPolyline, tunnelPolyline: tp, instructions } = await drawRoute(
         map,
         startLatLng.getLng(), startLatLng.getLat(),
         endLatLng.getLng(),   endLatLng.getLat(),
         apiOpt, avoid, hl
       );
+      console.log('instructions:', instructions); // 테스트
+
       routePolyline  = mainPolyline;
       tunnelPolyline = tp;
+
+      const instructionList = document.getElementById('routeInstructions');
+      instructionList.innerHTML = "";
+      instructions.forEach((desc, idx) =>
+        {
+          const li = document.createElement('li');
+          li.textContent = `${idx + 1}. ${desc}`;
+          instructionList.appendChild(li);
+        });
+
+      // console.log('showing panel'); // 테스트
+      window.showRoutePanel(); // 경로 안내 패널 띄우기
+
 
       // 지도 중앙 이동
       const midLat = (startLatLng.getLat() + endLatLng.getLat()) / 2;
