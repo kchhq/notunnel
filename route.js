@@ -1,5 +1,3 @@
-// route.js
-
 export async function drawRoute(
   map,
   startLng, startLat,
@@ -8,7 +6,6 @@ export async function drawRoute(
   avoidTunnels = false,
   highlightTunnels = false
 ) {
-  // 1) Tmap 요청 헬퍼
   async function fetchRoute(opt) {
     const res = await fetch(
       "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
@@ -16,57 +13,61 @@ export async function drawRoute(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "appKey": "appkey"
+          "appKey": "i21eBayOYj3UmtuIrwnnuaRfBIXFN5Fx9sQyQeIE"
         },
         body: JSON.stringify({
           startX: startLng.toString(),
-          startY: startLat .toString(),
-          endX:   endLng  .toString(),
-          endY:   endLat  .toString(),
+          startY: startLat.toString(),
+          endX:   endLng.toString(),
+          endY:   endLat.toString(),
           reqCoordType: "WGS84GEO",
           resCoordType: "WGS84GEO",
-          searchOption: opt
+          searchOption: opt,
+          avoidOption: avoidTunnels ? "16" : "0"
         })
       }
     );
     return res.json();
   }
 
-  // 2) 최초 경로 받아오기
-  let data = await fetchRoute(searchOption);
+  let data;
+  let fallbackUsed = false;
 
-  // 3) 터널 회피 옵션일 때만, 경로에 터널이 있으면 대체 옵션으로 재탐색
   if (avoidTunnels) {
-    const hasTunnel = data.features?.some(f =>
-      f.geometry.type === "LineString" &&
-      Number(f.properties.facilityType) === 2
-    );
+    const alternatives = ["0", "1", "2", "3", "4"];
+    let found = false;
 
-    if (hasTunnel) {
-      // 재탐색 우선 순위: 무료도로(3), 최단(1), 최소시간(2), 고속도로우선(4), 기본(0)
-      const alternatives = ["3","1","2","4","0"];
-      for (const alt of alternatives) {
-        if (alt === searchOption) continue;
-        const altData = await fetchRoute(alt);
-        const altHasTunnel = altData.features?.some(f =>
-          f.geometry.type === "LineString" &&
-          Number(f.properties.facilityType) === 2
-        );
-        if (!altHasTunnel && altData.features?.length) {
-          data = altData;
-          break;
-        }
+    for (const opt of alternatives) {
+      const candidate = await fetchRoute(opt);
+      const hasTunnel = candidate.features?.some(f =>
+        f.geometry.type === "LineString" &&
+        Number(f.properties.facilityType) === 2
+      );
+
+      console.log(`옵션 ${opt}: 터널 포함?`, hasTunnel);
+
+      if (!hasTunnel && candidate.features?.length) {
+        data = candidate;
+        console.log(`터널 없는 경로 찾음! searchOption: ${opt}`);
+        found = true;
+        break;
       }
     }
+
+    if (!found) {
+      alert("모든 옵션에서 터널 없는 경로를 찾지 못했습니다. 기본 경로를 사용합니다.");
+      data = await fetchRoute(searchOption);
+      fallbackUsed = true; // fallback 상태 표시
+    }
+  } else {
+    data = await fetchRoute(searchOption);
   }
 
-  // 4) 경로 유효성 검사
   if (!data.features?.length) {
     alert("경로를 찾을 수 없습니다.");
     return { mainPolyline: null, tunnelPolyline: null, instructions: [] };
   }
 
-  // 5) 경로 분리 및 안내문구 수집
   const normalPath   = [];
   const tunnelPath   = [];
   const instructions = [];
@@ -77,22 +78,24 @@ export async function drawRoute(
         ([lng, lat]) => new kakao.maps.LatLng(lat, lng)
       );
       const ft = Number(f.properties.facilityType);
-      // 터널 구간은 언제나 따로 모으고
-      if (ft === 2) {
-        tunnelPath.push(...seg);
-      }
-      // 메인 경로(normalPath)는 avoidTunnels 옵션에 따라
-      if (!avoidTunnels || ft !== 2) {
+
+      // 터널 회피 경로 탐색에 실패 후 기본 경로 추천 상태에서는 터널 구간도 nomalPath에 포함
+      if (fallbackUsed) {
         normalPath.push(...seg);
+      } else {
+        if (ft === 2) {
+          tunnelPath.push(...seg);
+        }
+        if (!avoidTunnels || ft !== 2) {
+          normalPath.push(...seg);
+        }
       }
-    }
-    else if (f.geometry.type === "Point") {
+    } else if (f.geometry.type === "Point") {
       const desc = f.properties.description?.trim();
       if (desc) instructions.push(desc);
     }
   });
 
-  // 6) 메인 폴리라인 (오렌지)
   const mainPolyline = new kakao.maps.Polyline({
     path: normalPath,
     strokeWeight: 4,
@@ -102,7 +105,6 @@ export async function drawRoute(
     map
   });
 
-  // 7) 터널 하이라이트 (옵션 체크 시)
   let tunnelPolyline = null;
   if (highlightTunnels && tunnelPath.length) {
     tunnelPolyline = new kakao.maps.Polyline({
